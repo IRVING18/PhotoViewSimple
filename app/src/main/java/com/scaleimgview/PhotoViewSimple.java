@@ -102,6 +102,13 @@ public class PhotoViewSimple extends View {
         public boolean onDoubleTap(MotionEvent e) {
             isBig = !isBig;
             if (isBig) {
+                //用于处理点击放大之后，让手指触摸点在对应放大之后的点看起来是一个点。
+                // 也就是点眼睛，放大之后还想让眼睛在我手指点的位置
+                // 在这是因为translate的是画布，所以移动坐标是相对中心点来的，所以计算都是以(getWidth()/2,getHeight()/2)为原点的。
+                transOffsetX = (e.getX() - getWidth() / 2) - (e.getX() - getWidth() / 2) * bigScale / smallScale;
+                transOffsetY = (e.getY() - getHeight() / 2) - (e.getY() - getHeight() / 2) * bigScale / smallScale;
+                //修正偏移量，不超过边界
+                fixOffsets();
                 getScaleAnimator().start();
             } else {
                 getScaleAnimator().reverse();
@@ -170,16 +177,12 @@ public class PhotoViewSimple extends View {
             //只有放大时可拖动
             if (isBig) {
                 transOffsetX -= distanceX;
-                //设置不能拖出屏幕
-                //x的最大值
-                transOffsetX = Math.min(transOffsetX, (bitmap.getWidth() * bigScale - (float) getWidth()) / 2);
-                //x的最小值
-                transOffsetX = Math.max(transOffsetX, -(bitmap.getWidth() * bigScale - (float) getWidth()) / 2);
 
                 transOffsetY -= distanceY;
-                transOffsetY = Math.min(transOffsetY, (bitmap.getHeight() * bigScale - (float) getHeight()) / 2);
-                transOffsetY = Math.max(transOffsetY, -(bitmap.getHeight() * bigScale - (float) getHeight()) / 2);
-//            Log.e("wzzzzzzzz", "onScroll: " + distanceX + "   " + distanceY + "  " + transOffsetY + "   " + transOffsetY);
+
+                //修正偏移量，不超过图片边界
+                fixOffsets();
+                //            Log.e("wzzzzzzzz", "onScroll: " + distanceX + "   " + distanceY + "  " + transOffsetY + "   " + transOffsetY);
 
                 invalidate();
             }
@@ -237,6 +240,19 @@ public class PhotoViewSimple extends View {
     };
 
     /**
+     * 修正偏移量，不超过边界
+     */
+    private void fixOffsets() {
+        //设置不能拖出屏幕
+        //x的最大值
+        transOffsetX = Math.min(transOffsetX, (bitmap.getWidth() * bigScale - (float) getWidth()) / 2);
+        //x的最小值
+        transOffsetX = Math.max(transOffsetX, -(bitmap.getWidth() * bigScale - (float) getWidth()) / 2);
+        transOffsetY = Math.min(transOffsetY, (bitmap.getHeight() * bigScale - (float) getHeight()) / 2);
+        transOffsetY = Math.max(transOffsetY, -(bitmap.getHeight() * bigScale - (float) getHeight()) / 2);
+    }
+
+    /**
      * 惯性滑动，实现手动动画
      */
     Runnable mFlingRunnable = new Runnable() {
@@ -288,11 +304,8 @@ public class PhotoViewSimple extends View {
     @Override
     protected void onDraw(Canvas canvas) {
         super.onDraw(canvas);
-        //只有在放大的情况再拖动
-        if (isBig) {
-            //手指拖动
-            canvas.translate(transOffsetX, transOffsetY);
-        }
+        //手指拖动，乘以*scaleFraction用来避免放大后，拖动之后再缩小不居中了就。
+        canvas.translate(transOffsetX * scaleFraction, transOffsetY * scaleFraction);
         //缩放
         float scale = smallScale + (bigScale - smallScale) * scaleFraction;
         canvas.scale(scale, scale, getWidth() / 2f, getHeight() / 2f);
