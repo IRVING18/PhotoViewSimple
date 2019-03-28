@@ -12,6 +12,12 @@
 #### 3、实现惯性滑动
 - 3.1 监听触摸事件 GestureDetectorCompat 的 **OnGestureListener** 的 **onFling()** 方法可以监听手势惯性。
 - 3.2 通过 **OverScroller** 惯性计算模型，可以帮助计算惯性值。
+#### 4、实现双指放缩
+- 4.1 设置ScaleGestureDetector，监听缩放数值。
+- 4.2 onScale()只能在一次事件流中累计缩放值，如果要拿到总的缩放值，那么在onScaleBegin()记录下上次的缩放值作为基数，然后就可以计算总的缩放值了。
+- 4.3 有了总的缩放值之后就可以计算scaleFraction系数了。
+- 4.4 在onTouchEvent中需要控制什么时候把event传给ScaleGestureDetector还是GestureDetectorCompat。
+在这我们直接先给ScaleGestureDetector，然后判断isInprocess()，只有两个手指以上的时候才会返回ture
 
 [基础知识](https://github.com/IRVING18/notes/blob/master/android/自定义View/A12、手势触摸-初探.md)
 
@@ -200,4 +206,70 @@
             }
         }
     };
+```
+## 4、实现双指放缩
+#### 4.1 设置ScaleGestureDetector，监听缩放数值。
+#### 4.2 onScale()只能在一次事件流中累计缩放值，如果要拿到总的缩放值，那么在onScaleBegin()记录下上次的缩放值作为基数，然后就可以计算总的缩放值了。
+#### 4.3 有了总的缩放值之后就可以计算scaleFraction系数了。
+```java
+        /**
+         * 双指缩放事件回调
+         */
+        mOnScaleGestureListener = new ScaleGestureDetector.OnScaleGestureListener() {
+            float cacheScale;
+
+            /**
+             * 获取放缩数值
+             *
+             * @param detector
+             * @return true:重新计算scale，false：在一次down事件流中是累加的
+             */
+            @Override
+            public boolean onScale(ScaleGestureDetector detector) {
+                //获取放大系数,范围是从1开始的，且只有在同一事件流中scaleFactor的值才是累加的，两次事件流只能自己算。
+                //这用的是cacheScale,每次事件流刚进来的时候先把上一次的基数留下来，然后乘上这次的scale，就是总scale
+                totalScale = cacheScale * detector.getScaleFactor();
+                if (smallScale <= totalScale && totalScale <= bigScale) {
+                    scaleFraction = (totalScale - smallScale) / (bigScale - smallScale);
+                    invalidate();
+                }
+                return false;
+            }
+            
+            /**
+             * 是否监听放缩手势
+             *
+             * @param detector
+             * @return true:才能获取到放缩手势
+             */
+            @Override
+            public boolean onScaleBegin(ScaleGestureDetector detector) {
+                if (smallScale <= totalScale && totalScale <= bigScale) {
+                    cacheScale = totalScale;
+                } else if (smallScale > totalScale) {
+                    cacheScale = smallScale;
+                } else {
+                    cacheScale = bigScale;
+                }
+
+                return true;
+            }
+        }
+```
+#### 4.2 在onTouchEvent中需要控制什么时候把event传给ScaleGestureDetector还是GestureDetectorCompat。
+在这我们直接先给ScaleGestureDetector，然后判断isInprocess()，只有两个手指以上的时候才会返回ture
+```java
+    @Override
+    public boolean onTouchEvent(MotionEvent event) {
+        boolean result;
+        //把事件交给GestureDetectorCompat，他的onDown事件要返回true，才能真正监听到。
+        result = mScaleDetector.onTouchEvent(event);
+        //如果两指事件触发了，就不给双击传递了
+        boolean inProgress = mScaleDetector.isInProgress();
+        if (!inProgress) {
+            result = mDetectorCompat.onTouchEvent(event);
+        }
+
+        return result;
+    }
 ```
